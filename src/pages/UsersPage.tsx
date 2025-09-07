@@ -55,13 +55,13 @@ export default function UsersPage() {
 
     if (loading) return <div className={"h-screen w-screen flex items-center justify-center text-2xl"}>Loading...</div>
     return (
-        <div className={"w-full flex flex-col justify-center items-center py-12 px-36 gap-6"}>
+        <div className={"w-full flex flex-col justify-center items-center py-12 px-36 max-sm:px-4 gap-6"}>
             <div className={"text-2xl select-none"}>Users</div>
             <div className={"text-2xl select-none"}>Total Records: {users.length}</div>
 
             <div className="w-full bg-white border border-gray-300 rounded p-4 flex flex-col gap-3">
                 <div className="font-semibold">Create new user</div>
-                <div className="grid grid-cols-12 gap-3">
+                <div className="grid grid-cols-12 max-sm:flex max-sm:flex-col gap-3">
                     <div className="col-span-4">
                         <input
                             type="text"
