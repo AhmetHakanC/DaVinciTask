@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import type {User} from '../types'
 import { getUsers, createUser, updateUser, deleteUser } from '../services/users'
 import { getPostsByUser } from '../services/posts'
-import {Input} from "postcss";
 
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([])
@@ -10,25 +9,38 @@ export default function UsersPage() {
     const [editing, setEditing] = useState<User | null>(null)
     const [postsCount, setPostsCount] = useState<Record<number, number>>({})
     const [draft, setDraft] = useState<Partial<User> | null>(null)
+    const [newUser, setNewUser] = useState<{ name: string; username: string; email: string }>({ name: '', username: '', email: '' })
 
     useEffect(() => {
-        (async () => {
+        void (async () => {
             const data = await getUsers()
             setUsers(data)
             setLoading(false)
+
             const counts: Record<number, number> = {}
-            await Promise.all(data.map(async u => {
-                const p = await getPostsByUser(u.id)
-                counts[u.id] = p.length
-            }))
+            await Promise.all(
+                data.map(async (u) => {
+                    const p = await getPostsByUser(u.id)
+                    counts[u.id] = p.length
+                })
+            )
             setPostsCount(counts)
         })()
     }, [])
 
+
     async function onCreate(u: Omit<User,'id'>) {
-        const optimistic = { id: Date.now(), ...u }
+        const optimistic = { id: users.length + 1, ...u }
         setUsers(prev => [optimistic, ...prev])
-        await createUser(u).catch(() => setUsers(prev => prev.filter(x => x.id !== optimistic.id)))
+        setPostsCount(prev => ({ ...prev, [optimistic.id]: 0 }))
+        await createUser(u).catch(() => {
+            setUsers(prev => prev.filter(x => x.id !== optimistic.id))
+            setPostsCount(prev => {
+                const copy = { ...prev }
+                delete copy[optimistic.id]
+                return copy
+            })
+        })
     }
     async function onUpdate(id:number, patch: Partial<User>) {
         const prev = [...users]
@@ -46,6 +58,80 @@ export default function UsersPage() {
         <div className={"w-full flex flex-col justify-center items-center py-12 px-36 gap-6"}>
             <div className={"text-2xl select-none"}>Users</div>
             <div className={"text-2xl select-none"}>Total Records: {users.length}</div>
+
+            <div className="w-full bg-white border border-gray-300 rounded p-4 flex flex-col gap-3">
+                <div className="font-semibold">Create new user</div>
+                <div className="grid grid-cols-12 gap-3">
+                    <div className="col-span-4">
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            placeholder="Name"
+                            value={newUser.name}
+                            onChange={(e) => setNewUser(p => ({ ...p, name: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    const canCreate = newUser.name.trim() && newUser.username.trim() && newUser.email.trim()
+                                    if (canCreate) {
+                                        void onCreate({ name: newUser.name.trim(), username: newUser.username.trim(), email: newUser.email.trim() }).then()
+                                        setNewUser({ name: '', username: '', email: '' })
+                                    }
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="col-span-4">
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            placeholder="Username"
+                            value={newUser.username}
+                            onChange={(e) => setNewUser(p => ({ ...p, username: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    const canCreate = newUser.name.trim() && newUser.username.trim() && newUser.email.trim()
+                                    if (canCreate) {
+                                        void onCreate({ name: newUser.name.trim(), username: newUser.username.trim(), email: newUser.email.trim() }).then()
+                                        setNewUser({ name: '', username: '', email: '' })
+                                    }
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="col-span-3">
+                        <input
+                            type="email"
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            placeholder="Email"
+                            value={newUser.email}
+                            onChange={(e) => setNewUser(p => ({ ...p, email: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                    const canCreate = newUser.name.trim() && newUser.username.trim() && newUser.email.trim()
+                                    if (canCreate) {
+                                        void onCreate({ name: newUser.name.trim(), username: newUser.username.trim(), email: newUser.email.trim() }).then()
+                                        setNewUser({ name: '', username: '', email: '' })
+                                    }
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="col-span-1 flex">
+                        <button
+                            className={`px-4 py-1.5 rounded text-white ${(newUser.name.trim() && newUser.username.trim() && newUser.email.trim()) ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
+                            disabled={!(newUser.name.trim() && newUser.username.trim() && newUser.email.trim())}
+                            onClick={() => {
+                                if (!(newUser.name.trim() && newUser.username.trim() && newUser.email.trim())) return
+                                void onCreate({ name: newUser.name.trim(), username: newUser.username.trim(), email: newUser.email.trim() }).then()
+                                setNewUser({ name: '', username: '', email: '' })
+                            }}
+                        >
+                            Create
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div className={"flex flex-col w-full bg-blue-50"}>
                 <table className={"w-full border-collapse"}>
                     <thead>
@@ -80,7 +166,7 @@ export default function UsersPage() {
                                                 const name = (draft?.name ?? '').trim()
                                                 const patch: Partial<User> = {}
                                                 if (name && name !== u.name) patch.name = name
-                                                if (Object.keys(patch).length) onUpdate(u.id, patch)
+                                                if (Object.keys(patch).length) void onUpdate(u.id, patch).then()
                                                 setEditing(null); setDraft(null)
                                             }
                                         }}
@@ -107,7 +193,7 @@ export default function UsersPage() {
                                                 if (name && name !== u.name) patch.name = name
                                                 if (username && username !== u.username) patch.username = username
                                                 if (email && email !== u.email) patch.email = email
-                                                if (Object.keys(patch).length) onUpdate(u.id, patch)
+                                                if (Object.keys(patch).length) void onUpdate(u.id, patch).then()
                                                 setEditing(null); setDraft(null)
                                             }
                                         }}
@@ -133,7 +219,7 @@ export default function UsersPage() {
                                                 if (name && name !== u.name) patch.name = name
                                                 if (username && username !== u.username) patch.username = username
                                                 if (email && email !== u.email) patch.email = email
-                                                if (Object.keys(patch).length) onUpdate(u.id, patch)
+                                                if (Object.keys(patch).length) void onUpdate(u.id, patch).then()
                                                 setEditing(null); setDraft(null)
                                             }
                                         }}
@@ -156,7 +242,7 @@ export default function UsersPage() {
                                                 if (name && name !== u.name) patch.name = name
                                                 if (username && username !== u.username) patch.username = username
                                                 if (email && email !== u.email) patch.email = email
-                                                if (Object.keys(patch).length) onUpdate(u.id, patch)
+                                                if (Object.keys(patch).length) void onUpdate(u.id, patch).then()
                                                 setEditing(null); setDraft(null)
                                             }}
                                         >
@@ -180,7 +266,7 @@ export default function UsersPage() {
                                         <button
                                             className={"px-4 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition"}
                                             onClick={() => {
-                                                if (window.confirm('Are you sure?')) onDelete(u.id)
+                                                if (window.confirm('Are you sure?')) void onDelete(u.id).then()
                                             }}
                                         >
                                             Delete

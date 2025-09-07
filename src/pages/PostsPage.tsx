@@ -9,19 +9,24 @@ export default function PostsPage() {
     const [loading, setLoading] = useState(true)
     const [editing, setEditing] = useState<Post | null>(null)
     const [draft, setDraft] = useState<Partial<Post> | null>(null)
+    const [newPost, setNewPost] = useState<{ userId: number | ''; title: string; body: string }>({ userId: '', title: '', body: '' })
 
     useEffect(() => {
-        (async () => {
+        void (async () => {
             const [p, u] = await Promise.all([getPosts(), getUsers()])
             setPosts(p); setUsers(u); setLoading(false)
         })()
     }, [])
 
-    async function onCreate(p: Omit<Post,'id'>) {
-        const optimistic = { id: Date.now(), ...p }
-        setPosts(prev => [optimistic, ...prev])
-        await createPost(p).catch(()=> setPosts(prev => prev.filter(x => x.id !== optimistic.id)))
-    }
+    async function onCreate(p: Omit<Post, 'id'>) {
+            const optimisticPost = { id: (posts.length + 1), ...p };
+            setPosts((prev) => [optimisticPost, ...prev]);
+            try {
+                await createPost(p);
+            } catch {
+                setPosts((prev) => prev.filter((post) => post.id !== optimisticPost.id));
+            }
+        }
     async function onUpdate(id:number, patch: Partial<Post>) {
         const prev = [...posts]
         setPosts(prev => prev.map(p => p.id===id ? { ...p, ...patch } : p))
@@ -38,7 +43,72 @@ export default function PostsPage() {
         <div className={"w-full flex flex-col justify-center items-center py-12 px-36 gap-6"}>
             <div className={"text-2xl select-none"}>Posts</div>
             <div className={"text-2xl select-none"}>Total Records: {posts.length}</div>
-            <div className={"flex flex-col w-full bg-blue-50"}>
+
+            <div className="w-full bg-white border border-gray-300 rounded p-4 flex flex-col gap-3">
+                <div className="font-semibold">Create new post</div>
+                <div className="grid grid-cols-12 gap-3">
+                    <div className="col-span-3">
+                        <select
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            value={newPost.userId}
+                            onChange={(e) => setNewPost(p => ({ ...p, userId: e.target.value ? Number(e.target.value) : '' }))}
+                        >
+                            <option value="">Select user</option>
+                            {users.map(u => (
+                                <option key={u.id} value={u.id}>{u.username} (#{u.id})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="col-span-4">
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            placeholder="Title"
+                            value={newPost.title}
+                            onChange={(e) => setNewPost(p => ({ ...p, title: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && newPost.userId && newPost.title.trim()) {
+                                    const payload = { userId: Number(newPost.userId), title: newPost.title.trim(), body: newPost.body.trim() }
+                                    void onCreate(payload)
+                                    setNewPost({ userId: '', title: '', body: '' })
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="col-span-4">
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-2 py-1"
+                            placeholder="Body (optional)"
+                            value={newPost.body}
+                            onChange={(e) => setNewPost(p => ({ ...p, body: e.target.value }))}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && newPost.userId && newPost.title.trim()) {
+                                    const payload = { userId: Number(newPost.userId), title: newPost.title.trim(), body: newPost.body.trim() }
+                                    void onCreate(payload)
+                                    setNewPost({ userId: '', title: '', body: '' })
+                                }
+                            }}
+                        />
+                    </div>
+                    <div className="col-span-1 flex">
+                        <button
+                            className={`px-4 py-1.5 rounded text-white ${newPost.userId && newPost.title.trim() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
+                            disabled={!newPost.userId || !newPost.title.trim()}
+                            onClick={() => {
+                                if (!newPost.userId || !newPost.title.trim()) return
+                                const payload = { userId: Number(newPost.userId), title: newPost.title.trim(), body: newPost.body.trim() }
+                                void onCreate(payload)
+                                setNewPost({ userId: '', title: '', body: '' })
+                            }}
+                        >
+                            Create
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+                <div className={"flex flex-col w-full bg-blue-50"}>
                 <table className={"w-full border-collapse"}>
                     <thead>
                     <tr className={"bg-blue-200"}>
@@ -75,8 +145,8 @@ export default function PostsPage() {
                                                 const body = (draft?.body ?? '').trim()
                                                 const patch: Partial<Post> = {}
                                                 if (title && title !== p.title) patch.title = title
-                                                if ((draft?.body ?? '') !== undefined && body !== (p.body ?? '')) patch.body = body
-                                                if (Object.keys(patch).length) onUpdate(p.id, patch)
+                                                if ((draft?.body || '') !== undefined && body !== (p.body || '')) patch.body = body
+                                                if (Object.keys(patch).length) void onUpdate(p.id, patch)
                                                 setEditing(null); setDraft(null)
                                             }
                                         }}
@@ -100,8 +170,8 @@ export default function PostsPage() {
                                                 const body = (draft?.body ?? '').trim()
                                                 const patch: Partial<Post> = {}
                                                 if (title && title !== p.title) patch.title = title
-                                                if ((draft?.body ?? '') !== undefined && body !== (p.body ?? '')) patch.body = body
-                                                if (Object.keys(patch).length) onUpdate(p.id, patch)
+                                                if ((draft?.body || '') !== undefined && body !== (p.body ?? '')) patch.body = body
+                                                if (Object.keys(patch).length) void onUpdate(p.id, patch)
                                                 setEditing(null); setDraft(null)
                                             }
                                         }}
@@ -110,9 +180,9 @@ export default function PostsPage() {
                                     p.body ?? ''
                                 )}
                             </td>
-                            <td className={"border-gray-300 p-2 flex flex-col justify-center items-center  gap-2 h-max bg-red-500"}>
+                            <td className={"border-gray-300 p-2 flex flex-col justify-center items-center  gap-2"}>
                                 {editing?.id === p.id ? (
-                                    <>
+                                    <div className="flex items-center justify-center h-full gap-2">
                                         <button
                                             className={"px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition"}
                                             onClick={() => {
@@ -120,8 +190,8 @@ export default function PostsPage() {
                                                 const body = (draft?.body ?? '').trim()
                                                 const patch: Partial<Post> = {}
                                                 if (title && title !== p.title) patch.title = title
-                                                if ((draft?.body ?? '') !== undefined && body !== (p.body ?? '')) patch.body = body
-                                                if (Object.keys(patch).length) onUpdate(p.id, patch)
+                                                if ((draft?.body || '') !== undefined && body !== (p.body ?? '')) patch.body = body
+                                                if (Object.keys(patch).length) void onUpdate(p.id, patch)
                                                 setEditing(null); setDraft(null)
                                             }}
                                         >
@@ -133,7 +203,7 @@ export default function PostsPage() {
                                         >
                                             Cancel
                                         </button>
-                                    </>
+                                    </div>
                                 ) : (
                                     <div className={"flex items-center justify-center h-full gap-2"}>
                                         <button
@@ -145,7 +215,7 @@ export default function PostsPage() {
                                         <button
                                             className={"px-4 py-1.5 bg-red-500 text-white rounded hover:bg-red-600 transition"}
                                             onClick={() => {
-                                                if (window.confirm('Are you sure?')) onDelete(p.id).then()
+                                                if (window.confirm('Are you sure you want to delete this record?')) void onDelete(p.id)
                                             }}
                                         >
                                             Delete
